@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Nourish — diet & nutrition tracker
 
-## Getting Started
+A mobile-first web app for tracking what you eat against daily calorie and protein goals.
 
-First, run the development server:
+- **Onboarding**: height and weight in metric or imperial, approximate BMI, and a goal
+  (weight loss, build muscle, increase mass, body recomposition, maintenance, pregnancy)
+  that sets suggested daily targets you can edit.
+- **Logging**: a chat where you describe a meal, attach a photo, or scan a barcode
+  (Open Food Facts). Every suggestion can be edited before it is saved.
+- **Dashboard**: progress bars for calories and protein, plus carbs, fat, fiber and water.
+- **Trends**: daily calories and protein against target, weight log with chart.
+- Favourite and recent foods for one-tap logging. Light and dark themes. Installable (PWA).
+
+## Stack
+
+Next.js (App Router) · TypeScript · Tailwind CSS · Supabase (auth, Postgres, storage) · Recharts.
+
+## Setup
+
+1. Create a Supabase project and run `supabase/migrations/0001_init.sql` in its SQL editor.
+2. Copy `.env.example` to `.env.local` and fill in the project URL and publishable key.
+3. Install and run:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+By default Supabase asks new users to confirm their email address before they can sign in.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Food estimation is a placeholder
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Text is parsed by a built-in parser with a table of ~160 common foods
+(`src/lib/estimator/mock.ts`, `foods.ts`). Photos are stored, but not recognised: the app
+asks you to describe the photo. To connect a real AI model, implement the `FoodEstimator`
+interface (`src/lib/estimator/types.ts`) and return it from `src/lib/estimator/index.ts`.
+`/api/estimate` is the only caller.
 
-## Learn More
+## Structure
 
-To learn more about Next.js, take a look at the following resources:
+- `src/lib/` — framework-free logic: nutrition formulas, unit conversion, estimator,
+  barcode normalisation, data access (`db.ts`). Reusable from a future native app.
+- `src/app/api/` — JSON endpoints (`/api/estimate`, `/api/barcode/[code]`), authenticated
+  with the user's Supabase access token as a bearer token.
+- `src/app/(app)/` — signed-in screens: `today`, `log`, `trends`, `profile`.
+- `supabase/migrations/` — database schema with row-level security.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Tests
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm test          # unit tests: formulas, unit conversion, text parser
+npm run lint
+```
 
-## Deploy on Vercel
+End-to-end walkthrough against an in-memory stand-in for Supabase (no real project needed):
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+node e2e/fake-supabase.mjs
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54399 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=test npm run build && NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54399 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=test npx next start -p 3100
+```
+
+```bash
+node e2e/smoke.mjs http://localhost:3100
+```
+
+The stand-in does not test database security rules; those live in the migration.
+
+Targets are estimates from standard formulas (Mifflin-St Jeor) and are not medical advice.
