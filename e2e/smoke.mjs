@@ -156,6 +156,52 @@ await page.getByText("Nothing logged on this day").waitFor();
 await page.getByRole("heading", { name: "Yesterday" }).waitFor();
 step("date switcher");
 
+// Logging to a past day. The Log page was already visited above, so this also
+// covers the page being kept alive in the background with its old day.
+const todayTotal = after - 120; // Zorblax was deleted
+const localDate = (daysAgo) => {
+  const x = new Date();
+  x.setDate(x.getDate() - daysAgo);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+};
+await page.locator('main a[href^="/log?date="]').click();
+await page.waitForURL(`**/log?date=${localDate(1)}`);
+assert.equal(await page.getByLabel("Day to log to").inputValue(), localDate(1), "log page picks up the chosen day");
+await page.getByLabel("What did you eat?").fill("an apple");
+await page.getByRole("button", { name: "Send" }).click();
+const ap = page.getByRole("region", { name: "Suggested entry" });
+await ap.getByText("Apple").waitFor();
+await ap.getByRole("button", { name: "Add to log" }).click();
+await page.getByText(/Added Apple to .* yesterday/).waitFor();
+await shot("08b-log-yesterday");
+await page.getByRole("link", { name: "Today" }).click();
+await page.getByRole("heading", { name: "Yesterday" }).waitFor();
+await page.getByRole("button", { name: "Edit Apple" }).waitFor();
+await page.getByRole("button", { name: "Next day" }).click();
+await page.getByRole("heading", { name: "Today" }).waitFor();
+await page.getByRole("button", { name: "Edit Banana" }).waitFor();
+assert.equal(Number(await cal.getByRole("progressbar").getAttribute("aria-valuenow")), todayTotal, "today's total unchanged");
+assert.equal(await page.getByRole("button", { name: "Edit Apple" }).count(), 0, "apple is not on today");
+
+// Changing the day with the picker on the Log page
+await page.getByRole("link", { name: "Log food", exact: true }).first().click();
+await page.waitForURL("**/log**");
+await page.getByLabel("Day to log to").fill(localDate(3));
+await page.waitForURL(`**/log?date=${localDate(3)}`);
+await page.getByLabel("What did you eat?").fill("a pear");
+await page.getByRole("button", { name: "Send" }).click();
+const pr = page.getByRole("region", { name: "Suggested entry" });
+await pr.getByText("Pear").waitFor();
+await pr.getByRole("button", { name: "Add to log" }).click();
+await page.getByText(/Added Pear to .* on /).waitFor();
+await page.getByRole("link", { name: "Today" }).click();
+for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Previous day" }).click();
+await page.getByRole("button", { name: "Edit Pear" }).waitFor();
+for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Next day" }).click();
+await page.getByRole("heading", { name: "Today" }).waitFor();
+assert.equal(Number(await cal.getByRole("progressbar").getAttribute("aria-valuenow")), todayTotal, "today's total still unchanged");
+step("logging to a past day");
+
 // Trends + weigh-in
 await page.getByRole("link", { name: "Trends" }).click();
 await page.getByRole("region", { name: "Weight" }).getByText("176 lb").first().waitFor();

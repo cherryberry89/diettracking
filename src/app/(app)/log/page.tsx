@@ -1,11 +1,12 @@
 "use client";
 
 import { Camera, Check, ChevronDown, ScanBarcode, SendHorizontal, Star, Trash2, Undo2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "@/components/app-context";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { DraftFields, formatAmount } from "@/components/DraftFields";
-import { Segmented, Sheet } from "@/components/ui";
+import { Segmented, Sheet, Spinner } from "@/components/ui";
 import { scaleNutrients, type BarcodeProduct } from "@/lib/barcode";
 import { friendlyDate, toLocalDate } from "@/lib/dates";
 import {
@@ -56,13 +57,35 @@ const MEAL_OPTIONS = (Object.keys(MEAL_LABELS) as Meal[]).map((m) => ({
   label: m === "snack" ? "Snack" : MEAL_LABELS[m],
 }));
 
+/** The day to log to, read from `?date=YYYY-MM-DD`. Falls back to today for a missing, malformed or future date. */
+function dayFromParam(param: string | null, today: string): string {
+  return param && /^\d{4}-\d{2}-\d{2}$/.test(param) && param <= today ? param : today;
+}
+
+/** Text appended to a confirmation so a past day is never mistaken for today. */
+function daySuffix(date: string, today: string): string {
+  if (date === today) return "";
+  const label = friendlyDate(date, today);
+  return label === "Yesterday" ? " yesterday" : ` on ${label}`;
+}
+
 export default function LogPage() {
+  // useSearchParams needs a Suspense boundary in a prerendered page.
+  return (
+    <Suspense fallback={<Spinner />}>
+      <LogChat />
+    </Suspense>
+  );
+}
+
+function LogChat() {
   const { db, userId } = useApp();
-  const [today] = useState(() => toLocalDate());
-  const [date, setDate] = useState(() => {
-    const d = new URLSearchParams(window.location.search).get("date");
-    return d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= toLocalDate() ? d : toLocalDate();
-  });
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Derived on every render rather than kept in state: this page stays alive in
+  // the background between visits, so the day must always follow the URL.
+  const today = toLocalDate();
+  const date = dayFromParam(searchParams.get("date"), today);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "hello",
@@ -210,7 +233,7 @@ export default function LogPage() {
       push({
         id: uid(),
         kind: "logged",
-        text: `Added ${food.name} to ${MEAL_LABELS[meal].toLowerCase()} · ${fmt(food.calories)} kcal · ${fmt(food.protein_g)} g protein`,
+        text: `Added ${food.name} to ${MEAL_LABELS[meal].toLowerCase()}${daySuffix(date, today)} · ${fmt(food.calories)} kcal · ${fmt(food.protein_g)} g protein`,
         entryIds: rows.map((r) => r.id),
       });
     } catch {
@@ -237,7 +260,7 @@ export default function LogPage() {
       replace(m.id, {
         id: m.id,
         kind: "logged",
-        text: `Added ${items.length === 1 ? items[0].name : `${items.length} items`} to ${MEAL_LABELS[m.meal].toLowerCase()} · ${fmt(t.calories)} kcal · ${fmt(t.protein_g)} g protein`,
+        text: `Added ${items.length === 1 ? items[0].name : `${items.length} items`} to ${MEAL_LABELS[m.meal].toLowerCase()}${daySuffix(date, today)} · ${fmt(t.calories)} kcal · ${fmt(t.protein_g)} g protein`,
         entryIds: rows.map((r) => r.id),
       });
       loadQuick();
@@ -263,13 +286,22 @@ export default function LogPage() {
         <h1 className="text-xl font-semibold tracking-tight">Log food</h1>
         <label className="flex items-center gap-2 text-sm text-muted">
           <span className="sr-only">Day to log to</span>
-          <span aria-hidden="true">{friendlyDate(date, today)}</span>
+          <span
+            aria-hidden="true"
+            className={date === today ? "" : "rounded-full bg-accent-soft px-2.5 py-1 font-semibold text-accent"}
+          >
+            {friendlyDate(date, today)}
+          </span>
           <input
             type="date"
-            className="input min-h-9 w-auto px-2 text-sm"
+            className={`input min-h-9 w-auto px-2 text-sm ${date === today ? "" : "border-accent"}`}
             value={date}
             max={today}
-            onChange={(e) => e.target.value && setDate(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (!next) return;
+              router.replace(next === today ? "/log" : `/log?date=${next}`, { scroll: false });
+            }}
           />
         </label>
       </header>
